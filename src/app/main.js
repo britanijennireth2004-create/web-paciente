@@ -328,11 +328,20 @@ function mountLogin(root, { onSuccess, onRegister }) {
               <span>Cuenta bloqueada temporalmente. Espere <strong id="lock-countdown">${getLockRemaining()}</strong> segundos para intentar de nuevo.</span>
             </div>
             <button type="submit" class="login-submit-btn" ${isLocked ? 'disabled' : ''}>INICIAR SESIÓN</button>
-            <div class="login-recover" style="margin-top: 1rem; text-align: center;">
+            
+            <div class="login-recover" style="margin-top: 0.75rem; text-align: center;">
               <a href="#" id="recover-link">¿Olvidó su contraseña? Recuperar acceso</a>
             </div>
             <div class="login-recover" style="margin-top: 0.5rem; text-align: center;">
               <a href="#" id="register-link">¿No tienes cuenta? Regístrate aquí</a>
+            </div>
+            
+            <!-- Enlace para volver a la página de bienvenida (landing) -->
+            <div class="login-back-link" style="text-align: center; padding-top: 0.5rem; border-top: 1px solid #e2e8f0;">
+              <a href="#" id="back-to-landing-link" style="color: var(--themeDark); text-decoration: none; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18"/><path d="m16 8 4 4-4 4M8 16l-4-4 4-4"/></svg>
+                Volver a la página principal
+              </a>
             </div>
           </form>
         </div>
@@ -502,6 +511,19 @@ function mountLogin(root, { onSuccess, onRegister }) {
     function showErr(id, msg) {
       const el = root.querySelector('#' + id);
       if (el) { el.innerHTML = `${ai.warn} <span>${msg}</span>`; el.style.display = 'flex'; }
+    }
+
+    // Enlace para volver a la landing page
+    const backToLandingLink = root.querySelector('#back-to-landing-link');
+    if (backToLandingLink) {
+      backToLandingLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Limpiar datos de sesión para volver a la pantalla de bienvenida
+        localStorage.removeItem('hospital_user');
+        localStorage.removeItem('hospital_landing_seen');
+        // Recargar la aplicación para mostrar la landing page
+        location.reload();
+      });
     }
 
     const loginForm = root.querySelector('#login-form');
