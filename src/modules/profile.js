@@ -34,17 +34,97 @@ export default function mountProfile(root, { bus, store, user, role }) {
     check: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
   };
 
-  // ── Helpers ──────────────────────────────────────────────────
+  // ── Helper para normalizar fecha a string YYYY-MM-DD ──
+  function normalizeDateString(dateInput) {
+    if (!dateInput) return null;
+    
+    // Si ya es string en formato YYYY-MM-DD
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      return dateInput;
+    }
+    
+    // Si es timestamp (número)
+    if (typeof dateInput === 'number') {
+      const date = new Date(dateInput);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Si es objeto Date
+    if (dateInput instanceof Date && !isNaN(dateInput)) {
+      const year = dateInput.getFullYear();
+      const month = String(dateInput.getMonth() + 1).padStart(2, '0');
+      const day = String(dateInput.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Si es string en otro formato, intentar parsear
+    if (typeof dateInput === 'string') {
+      const parsed = new Date(dateInput);
+      if (!isNaN(parsed)) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, '0');
+        const day = String(parsed.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+    
+    return null;
+  }
+
+  // ── Cálculo de edad preciso basado en la fecha local ──
+  function calculateAge(birthDateStr) {
+    if (!birthDateStr) return '—';
+    
+    const normalized = normalizeDateString(birthDateStr);
+    if (!normalized) return '—';
+    
+    // Parsear la fecha como string YYYY-MM-DD sin conversión de zona horaria
+    const [year, month, day] = normalized.split('-').map(Number);
+    const birthDate = new Date(year, month - 1, day); // Mes 0-indexado
+    const today = new Date();
+    
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age > 0 ? `${age} años` : '—';
+  }
+  
+  // ── Formateo de fecha sin problemas de zona horaria ──
+  function formatDate(dateInput) {
+    if (!dateInput) return '—';
+    
+    const normalized = normalizeDateString(dateInput);
+    if (!normalized) return '—';
+    
+    // Parsear la fecha como string YYYY-MM-DD
+    const [year, month, day] = normalized.split('-').map(Number);
+    
+    // Formatear usando los componentes numéricos directamente para evitar problemas de zona horaria
+    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    
+    return `${day.toString().padStart(2, '0')} de ${months[month - 1]} de ${year}`;
+  }
+  
+  // Mantener función age para compatibilidad (usa el cálculo corregido)
   function age(birthDate) {
     if (!birthDate) return '—';
-    const d = new Date(birthDate);
-    const y = new Date().getFullYear() - d.getFullYear();
-    return y > 0 ? `${y} años` : '—';
+    return calculateAge(birthDate);
   }
+  
+  // Mantener fmtDate para compatibilidad
   function fmtDate(d) {
     if (!d) return '—';
-    return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+    return formatDate(d);
   }
+  
   function notify(msg, type = 'success') {
     bus.emit && bus.emit('notify', { message: msg, type });
   }
@@ -71,6 +151,9 @@ export default function mountProfile(root, { bus, store, user, role }) {
   // ── Vista de solo lectura ─────────────────────────────────────
   function renderView(p) {
     const initials = p.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const ageValue = age(p.birthDate);
+    const formattedBirthDate = fmtDate(p.birthDate);
+    
     return `
 <style>
 .profile-wrap { display:flex; flex-direction:column; gap:1.25rem; max-width:860px; margin:0 auto; }
@@ -135,18 +218,18 @@ export default function mountProfile(root, { bus, store, user, role }) {
   <div class="profile-hero">
     <div class="profile-avatar">${initials}</div>
     <div style="flex:1;min-width:0;">
-      <h2 style="margin:0;font-size:1.35rem;font-weight:800;color:#1e293b;">${p.name}</h2>
+      <h2 style="margin:0;font-size:1.35rem;font-weight:800;color:#1e293b;">${escapeHtml(p.name)}</h2>
       <p style="margin:0.35rem 0 0;font-size:0.85rem;color:#475569;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-        <span style="display:inline-flex;align-items:center;gap:0.25rem;">${I.id}<span>DNI: ${p.dni || '—'}</span></span>
+        <span style="display:inline-flex;align-items:center;gap:0.25rem;">${I.id}<span>DNI: ${escapeHtml(p.dni || '—')}</span></span>
         <span style="color:#cbd5e1;">·</span>
-        <span style="display:inline-flex;align-items:center;gap:0.25rem;">${I.calendar}<span>${fmtDate(p.birthDate)}</span></span>
+        <span style="display:inline-flex;align-items:center;gap:0.25rem;">${I.calendar}<span>${formattedBirthDate}</span></span>
         <span style="color:#cbd5e1;">·</span>
-        <span style="font-weight:600;color:#334155;">${age(p.birthDate)}</span>
+        <span style="font-weight:600;color:#334155;">${ageValue}</span>
       </p>
       ${p.bloodType ? `
       <p style="margin:0.4rem 0 0;font-size:0.82rem;color:#475569;display:inline-flex;align-items:center;gap:0.3rem;">
         ${I.heart}<span>Grupo sanguíneo:</span>
-        <strong style="color:#059669;font-size:0.9rem;">${p.bloodType}</strong>
+        <strong style="color:#059669;font-size:0.9rem;">${escapeHtml(p.bloodType)}</strong>
       </p>` : ''}
     </div>
     <button class="btn-edit-profile" id="btn-edit-profile">${I.edit} Editar Perfil</button>
@@ -156,12 +239,12 @@ export default function mountProfile(root, { bus, store, user, role }) {
   <div class="profile-card">
     <div class="profile-card-header">${I.user} Datos Personales</div>
     <div class="profile-grid">
-      <div class="profile-field"><label>${I.id} DNI / Cédula</label><span>${p.dni || '—'}</span></div>
-      <div class="profile-field"><label>${I.calendar} Fecha de Nacimiento</label><span>${fmtDate(p.birthDate)}&nbsp; <small style="color:var(--muted);">(${age(p.birthDate)})</small></span></div>
-      <div class="profile-field"><label>Lugar de Nacimiento</label><span>${p.birthPlace || '—'}</span></div>
-      <div class="profile-field"><label>Nacionalidad</label><span>${p.nationality || '—'}</span></div>
+      <div class="profile-field"><label>${I.id} DNI / Cédula</label><span>${escapeHtml(p.dni || '—')}</span></div>
+      <div class="profile-field"><label>${I.calendar} Fecha de Nacimiento</label><span>${formattedBirthDate}&nbsp; <small style="color:var(--muted);">(${ageValue})</small></span></div>
+      <div class="profile-field"><label>Lugar de Nacimiento</label><span>${escapeHtml(p.birthPlace || '—')}</span></div>
+      <div class="profile-field"><label>Nacionalidad</label><span>${escapeHtml(p.nationality || '—')}</span></div>
       <div class="profile-field"><label>Género</label><span>${p.gender === 'M' ? 'Masculino' : p.gender === 'F' ? 'Femenino' : p.gender || '—'}</span></div>
-      <div class="profile-field"><label>Estado Civil</label><span>${p.civilStatus || '—'}</span></div>
+      <div class="profile-field"><label>Estado Civil</label><span>${escapeHtml(p.civilStatus || '—')}</span></div>
     </div>
   </div>
 
@@ -169,9 +252,9 @@ export default function mountProfile(root, { bus, store, user, role }) {
   <div class="profile-card">
     <div class="profile-card-header">${I.phone} Información de Contacto</div>
     <div class="profile-grid">
-      <div class="profile-field"><label>${I.phone} Teléfono</label><span>${p.phone || '—'}</span></div>
-      <div class="profile-field"><label>${I.mail} Correo Electrónico</label><span>${p.email || '—'}</span></div>
-      <div class="profile-field" style="grid-column:1/-1;border-right:none;"><label>${I.map} Dirección</label><span>${p.address || '—'}</span></div>
+      <div class="profile-field"><label>${I.phone} Teléfono</label><span>${escapeHtml(p.phone || '—')}</span></div>
+      <div class="profile-field"><label>${I.mail} Correo Electrónico</label><span>${escapeHtml(p.email || '—')}</span></div>
+      <div class="profile-field" style="grid-column:1/-1;border-right:none;"><label>${I.map} Dirección</label><span>${escapeHtml(p.address || '—')}</span></div>
     </div>
   </div>
 
@@ -179,11 +262,11 @@ export default function mountProfile(root, { bus, store, user, role }) {
   <div class="profile-card">
     <div class="profile-card-header">${I.heart} Datos Clínicos</div>
     <div class="profile-grid">
-      <div class="profile-field"><label>${I.heart} Grupo Sanguíneo</label><span>${p.bloodType || '—'}</span></div>
+      <div class="profile-field"><label>${I.heart} Grupo Sanguíneo</label><span>${escapeHtml(p.bloodType || '—')}</span></div>
       <div class="profile-field"><label>${I.alert} Alergias</label>
         <span>
           ${p.allergies?.length
-        ? p.allergies.map(a => `<span class="badge-allergy">${I.alert} ${a}</span>`).join('')
+        ? p.allergies.map(a => `<span class="badge-allergy">${I.alert} ${escapeHtml(a)}</span>`).join('')
         : `<span class="badge-ok">${I.check} Sin alergias registradas</span>`}
         </span>
       </div>
@@ -194,9 +277,9 @@ export default function mountProfile(root, { bus, store, user, role }) {
   <div class="profile-card">
     <div class="profile-card-header">${I.alert} Contacto de Emergencia</div>
     <div class="profile-grid">
-      <div class="profile-field"><label>Nombre</label><span>${p.emergencyContact?.name || '—'}</span></div>
-      <div class="profile-field"><label>Parentesco</label><span>${p.emergencyContact?.relation || '—'}</span></div>
-      <div class="profile-field" style="grid-column:1/-1;border-right:none;"><label>${I.phone} Teléfono</label><span>${p.emergencyContact?.phone || '—'}</span></div>
+      <div class="profile-field"><label>Nombre</label><span>${escapeHtml(p.emergencyContact?.name || '—')}</span></div>
+      <div class="profile-field"><label>Parentesco</label><span>${escapeHtml(p.emergencyContact?.relation || '—')}</span></div>
+      <div class="profile-field" style="grid-column:1/-1;border-right:none;"><label>${I.phone} Teléfono</label><span>${escapeHtml(p.emergencyContact?.phone || '—')}</span></div>
     </div>
   </div>
 
@@ -213,7 +296,7 @@ export default function mountProfile(root, { bus, store, user, role }) {
         </span>
       </div>
       <div class="profile-field"><label>Fecha</label><span>${p.consent?.date ? fmtDate(p.consent.date) : '—'}</span></div>
-      <div class="profile-field" style="grid-column:1/-1;border-right:none;border-bottom:none;"><label>Alcance</label><span>${p.consent?.scope || '—'}</span></div>
+      <div class="profile-field" style="grid-column:1/-1;border-right:none;border-bottom:none;"><label>Alcance</label><span>${escapeHtml(p.consent?.scope || '—')}</span></div>
     </div>
   </div>
 
@@ -223,6 +306,9 @@ export default function mountProfile(root, { bus, store, user, role }) {
   // ── Formulario de edición ─────────────────────────────────────
   function renderEditForm(p) {
     const allergiesStr = (p.allergies || []).join(', ');
+    // Normalizar la fecha para el input type="date"
+    const birthDateForInput = normalizeDateString(p.birthDate) || '';
+    
     return `
 <style>
 .profile-edit-wrap { max-width:860px; margin:0 auto; display:flex; flex-direction:column; gap:1.25rem; }
@@ -256,21 +342,21 @@ export default function mountProfile(root, { bus, store, user, role }) {
       <div class="edit-row">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Nombre Completo</label>
-          <input class="input" id="ef-name" type="text" value="${p.name || ''}" placeholder="Nombre y apellido">
+          <input class="input" id="ef-name" type="text" value="${escapeHtml(p.name || '')}" placeholder="Nombre y apellido">
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">DNI / Cédula</label>
-          <input class="input" id="ef-dni" type="text" value="${p.dni || ''}" placeholder="Ej: 12345678A">
+          <input class="input" id="ef-dni" type="text" value="${escapeHtml(p.dni || '')}" placeholder="Ej: 12345678A">
         </div>
       </div>
       <div class="edit-row">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Fecha de Nacimiento</label>
-          <input class="input" id="ef-birthdate" type="date" value="${p.birthDate || ''}">
+          <input class="input" id="ef-birthdate" type="date" value="${birthDateForInput}">
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">Lugar de Nacimiento</label>
-          <input class="input" id="ef-birthplace" type="text" value="${p.birthPlace || ''}" placeholder="Ciudad, Estado">
+          <input class="input" id="ef-birthplace" type="text" value="${escapeHtml(p.birthPlace || '')}" placeholder="Ciudad, Estado">
         </div>
       </div>
       <div class="edit-row">
@@ -295,7 +381,7 @@ export default function mountProfile(root, { bus, store, user, role }) {
       <div class="edit-row">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Nacionalidad</label>
-          <input class="input" id="ef-nationality" type="text" value="${p.nationality || ''}" placeholder="País de ciudadanía">
+          <input class="input" id="ef-nationality" type="text" value="${escapeHtml(p.nationality || '')}" placeholder="País de ciudadanía">
         </div>
       </div>
     </div>
@@ -308,17 +394,17 @@ export default function mountProfile(root, { bus, store, user, role }) {
       <div class="edit-row">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Teléfono</label>
-          <input class="input" id="ef-phone" type="tel" value="${p.phone || ''}" placeholder="Ej: 555-0101">
+          <input class="input" id="ef-phone" type="tel" value="${escapeHtml(p.phone || '')}" placeholder="Ej: 555-0101">
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">Correo Electrónico</label>
-          <input class="input" id="ef-email" type="email" value="${p.email || ''}" placeholder="correo@ejemplo.com">
+          <input class="input" id="ef-email" type="email" value="${escapeHtml(p.email || '')}" placeholder="correo@ejemplo.com">
         </div>
       </div>
       <div class="edit-row full">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Dirección de Residencia</label>
-          <input class="input" id="ef-address" type="text" value="${p.address || ''}" placeholder="Calle, número, ciudad">
+          <input class="input" id="ef-address" type="text" value="${escapeHtml(p.address || '')}" placeholder="Calle, número, ciudad">
         </div>
       </div>
     </div>
@@ -339,7 +425,7 @@ export default function mountProfile(root, { bus, store, user, role }) {
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">Alergias conocidas <span style="font-weight:400;">(separar por coma)</span></label>
-          <input class="input" id="ef-allergies" type="text" value="${allergiesStr}"
+          <input class="input" id="ef-allergies" type="text" value="${escapeHtml(allergiesStr)}"
                  placeholder="Ej: Penicilina, Ibuprofeno, Mariscos">
         </div>
       </div>
@@ -353,15 +439,15 @@ export default function mountProfile(root, { bus, store, user, role }) {
       <div class="edit-row tri">
         <div class="form-group" style="margin:0;">
           <label class="form-label">Nombre</label>
-          <input class="input" id="ef-ec-name" type="text" value="${p.emergencyContact?.name || ''}" placeholder="Nombre completo">
+          <input class="input" id="ef-ec-name" type="text" value="${escapeHtml(p.emergencyContact?.name || '')}" placeholder="Nombre completo">
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">Parentesco</label>
-          <input class="input" id="ef-ec-rel" type="text" value="${p.emergencyContact?.relation || ''}" placeholder="Ej: Madre, Cónyuge">
+          <input class="input" id="ef-ec-rel" type="text" value="${escapeHtml(p.emergencyContact?.relation || '')}" placeholder="Ej: Madre, Cónyuge">
         </div>
         <div class="form-group" style="margin:0;">
           <label class="form-label">Teléfono</label>
-          <input class="input" id="ef-ec-phone" type="tel" value="${p.emergencyContact?.phone || ''}" placeholder="555-0000">
+          <input class="input" id="ef-ec-phone" type="tel" value="${escapeHtml(p.emergencyContact?.phone || '')}" placeholder="555-0000">
         </div>
       </div>
     </div>
@@ -439,6 +525,17 @@ export default function mountProfile(root, { bus, store, user, role }) {
       notify('Perfil actualizado correctamente.', 'success');
       render();
     });
+  }
+  
+  // ── Función helper para escapar HTML (seguridad) ──
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ── Iniciar ───────────────────────────────────────────────────
